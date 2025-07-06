@@ -18,6 +18,21 @@ use tokio::fs;
 use tokio::process::Command;
 use tracing::{debug, error, info, instrument, warn};
 
+/// Theme options for OpenGraph image generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum Theme {
+    /// Default crates.io theme
+    CratesIo,
+    /// docs.rs theme with black and white colors and docs.rs logo
+    DocsRs,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self::CratesIo
+    }
+}
+
 /// Data structure containing information needed to generate an OpenGraph image
 /// for a crates.io crate.
 #[derive(Debug, Clone, Serialize)]
@@ -74,6 +89,7 @@ pub struct OgImageGenerator {
     typst_binary_path: PathBuf,
     typst_font_path: Option<PathBuf>,
     oxipng_binary_path: PathBuf,
+    theme: Theme,
 }
 
 impl OgImageGenerator {
@@ -216,6 +232,24 @@ impl OgImageGenerator {
     /// ```
     pub fn with_oxipng_path(mut self, oxipng_path: PathBuf) -> Self {
         self.oxipng_binary_path = oxipng_path;
+        self
+    }
+
+    /// Sets the theme for OpenGraph image generation.
+    ///
+    /// This allows specifying which visual theme to use when generating images.
+    /// Defaults to `Theme::CratesIo` if not explicitly set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use crates_io_og_image::{OgImageGenerator, Theme};
+    ///
+    /// let generator = OgImageGenerator::default()
+    ///     .with_theme(Theme::DocsRs);
+    /// ```
+    pub fn with_theme(mut self, theme: Theme) -> Self {
+        self.theme = theme;
         self
     }
 
@@ -380,10 +414,16 @@ impl OgImageGenerator {
         fs::create_dir(&assets_dir).await?;
 
         debug!("Copying bundled assets to temporary directory");
-        let cargo_logo = include_bytes!("../template/assets/cargo.png");
-        fs::write(assets_dir.join("cargo.png"), cargo_logo).await?;
         let rust_logo_svg = include_bytes!("../template/assets/rust-logo.svg");
         fs::write(assets_dir.join("rust-logo.svg"), rust_logo_svg).await?;
+
+        if self.theme == Theme::DocsRs {
+            let docs_rs_logo_white_svg = include_bytes!("../template/assets/docs-rs-logo.svg");
+            fs::write(assets_dir.join("docs-rs-logo.svg"), docs_rs_logo_white_svg).await?;
+        } else {
+            let cargo_logo = include_bytes!("../template/assets/cargo.png");
+            fs::write(assets_dir.join("cargo.png"), cargo_logo).await?;
+        }
 
         // Copy SVG icons
         debug!("Copying SVG icon assets");
@@ -419,23 +459,28 @@ impl OgImageGenerator {
         let output_file = NamedTempFile::new().map_err(OgImageError::TempFileError)?;
         debug!(output_path = %output_file.path().display(), "Created output file");
 
-        // Serialize data and avatar_map to JSON
-        debug!("Serializing data and avatar map to JSON");
+        // Serialize data, avatar_map, and theme to JSON
+        debug!("Serializing data, avatar map, and theme to JSON");
         let json_data =
             serde_json::to_string(&data).map_err(OgImageError::JsonSerializationError)?;
 
         let json_avatar_map =
             serde_json::to_string(&avatar_map).map_err(OgImageError::JsonSerializationError)?;
 
+        let json_theme =
+            serde_json::to_string(&self.theme).map_err(OgImageError::JsonSerializationError)?;
+
         // Run typst compile command with input data
         info!("Running Typst compilation command");
         let mut command = Command::new(&self.typst_binary_path);
         command.arg("compile").arg("--format").arg("png");
 
-        // Pass in the data and avatar map as JSON inputs
+        // Pass in the data, avatar map, and theme as JSON inputs
         let input = format!("data={json_data}");
         command.arg("--input").arg(input);
         let input = format!("avatar_map={json_avatar_map}");
+        command.arg("--input").arg(input);
+        let input = format!("theme={json_theme}");
         command.arg("--input").arg(input);
 
         // Pass in the font path if specified
@@ -578,6 +623,7 @@ impl Default for OgImageGenerator {
             typst_binary_path: PathBuf::from("typst"),
             typst_font_path: None,
             oxipng_binary_path: PathBuf::from("oxipng"),
+            theme: Theme::default(),
         }
     }
 }
@@ -752,9 +798,10 @@ mod tests {
         }
     }
 
-    async fn generate_image(data: OgImageData<'_>) -> Option<Vec<u8>> {
-        let generator =
-            OgImageGenerator::from_environment().expect("Failed to create OgImageGenerator");
+    async fn generate_image(data: OgImageData<'_>, theme: Theme) -> Option<Vec<u8>> {
+        let generator = OgImageGenerator::from_environment()
+            .expect("Failed to create OgImageGenerator")
+            .with_theme(theme);
 
         let temp_file = generator
             .generate(data)
@@ -769,7 +816,7 @@ mod tests {
         let _guard = init_tracing();
         let data = create_simple_test_data();
 
-        if let Some(image_data) = generate_image(data).await {
+        if let Some(image_data) = generate_image(data, Theme::CratesIo).await {
             insta::assert_binary_snapshot!("generated_og_image.png", image_data);
         }
     }
@@ -784,7 +831,7 @@ mod tests {
         let authors = create_overflow_authors(&server_url);
         let data = create_overflow_test_data(&authors);
 
-        if let Some(image_data) = generate_image(data).await {
+        if let Some(image_data) = generate_image(data, Theme::CratesIo).await {
             insta::assert_binary_snapshot!("generated_og_image_overflow.png", image_data);
         }
     }
@@ -794,7 +841,7 @@ mod tests {
         let _guard = init_tracing();
         let data = create_minimal_test_data();
 
-        if let Some(image_data) = generate_image(data).await {
+        if let Some(image_data) = generate_image(data, Theme::CratesIo).await {
             insta::assert_binary_snapshot!("generated_og_image_minimal.png", image_data);
         }
     }
@@ -809,7 +856,7 @@ mod tests {
         let authors = create_escaping_authors(&server_url);
         let data = create_escaping_test_data(&authors);
 
-        if let Some(image_data) = generate_image(data).await {
+        if let Some(image_data) = generate_image(data, Theme::CratesIo).await {
             insta::assert_binary_snapshot!("generated_og_image_escaping.png", image_data);
         }
     }
@@ -838,7 +885,7 @@ mod tests {
             releases: 1,
         };
 
-        if let Some(image_data) = generate_image(data).await {
+        if let Some(image_data) = generate_image(data, Theme::CratesIo).await {
             insta::assert_binary_snapshot!("404-avatar.png", image_data);
         }
     }
@@ -866,8 +913,18 @@ mod tests {
             releases: 3,
         };
 
-        if let Some(image_data) = generate_image(data).await {
+        if let Some(image_data) = generate_image(data, Theme::CratesIo).await {
             insta::assert_binary_snapshot!("unicode-truncation.png", image_data);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_og_image_docs_rs_theme() {
+        let _guard = init_tracing();
+        let data = create_simple_test_data();
+
+        if let Some(image_data) = generate_image(data, Theme::DocsRs).await {
+            insta::assert_binary_snapshot!("docs_rs_theme.png", image_data);
         }
     }
 }
