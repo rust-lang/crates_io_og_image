@@ -5,8 +5,20 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "OpenGraph image generation for crates.io"
 
-[lints]
-workspace = true
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[lints.rust]
+future_incompatible = "warn"
+nonstandard_style = "warn"
+rust_2018_idioms = "warn"
+rust_2018_compatibility = "warn"
+rust_2021_compatibility = "warn"
+unused = "warn"
+
+[lints.rustdoc]
+unescaped_backticks = "warn"
 
 [dependencies]
 anyhow = "=1.0.98"
