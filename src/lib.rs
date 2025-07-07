@@ -1,12 +1,13 @@
 #![doc = include_str!("../README.md")]
 
+mod env;
 mod error;
 mod formatting;
 
 pub use error::OgImageError;
 
+use crate::env::var;
 use crate::formatting::{serialize_bytes, serialize_number, serialize_optional_number};
-use crates_io_env_vars::var;
 use reqwest::StatusCode;
 use serde::Serialize;
 use std::borrow::Cow;

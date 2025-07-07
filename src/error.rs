@@ -12,7 +12,7 @@ pub enum OgImageError {
 
     /// Environment variable error.
     #[error("Environment variable error: {0}")]
-    EnvVarError(anyhow::Error),
+    EnvVarError(std::env::VarError),
 
     /// Failed to download avatar from URL.
     #[error("Failed to download avatar from URL '{url}': {source}")]
