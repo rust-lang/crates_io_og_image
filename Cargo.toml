@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "OpenGraph image generation for crates.io"
+repository = "https://github.com/rust-lang/crates_io_og_image"
 
 [lints.clippy]
 dbg_macro = "warn"
