@@ -72,8 +72,6 @@ The path to the Typst CLI can be configured through the `TYPST_PATH` environment
 cargo test
 ```
 
-Note that some tests require Typst to be installed and will be skipped if it's not available.
-
 ### Example
 
 The crate includes an example that demonstrates how to generate an image:
@@ -82,7 +80,7 @@ The crate includes an example that demonstrates how to generate an image:
 cargo run --example test_generator
 ```
 
-This will generate a test image in the current directory. This will also test the avatar fetching functionality, which requires network access and isn't run as part of the automated tests.
+This will generate a test image in the current directory
 
 ## License
 
