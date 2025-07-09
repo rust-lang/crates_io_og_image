@@ -752,27 +752,7 @@ mod tests {
         }
     }
 
-    fn skip_if_typst_unavailable() -> bool {
-        if matches!(var("CI"), Ok(Some(_))) {
-            // Do not skip tests in CI environments, even if Typst is unavailable.
-            // We want the test to fail instead of silently skipping.
-            return false;
-        }
-
-        std::process::Command::new("typst")
-            .arg("--version")
-            .output()
-            .inspect_err(|_| {
-                eprintln!("Skipping test: typst binary not found in PATH");
-            })
-            .is_err()
-    }
-
     async fn generate_image(data: OgImageData<'_>) -> Option<Vec<u8>> {
-        if skip_if_typst_unavailable() {
-            return None;
-        }
-
         let generator =
             OgImageGenerator::from_environment().expect("Failed to create OgImageGenerator");
 
