@@ -4,6 +4,9 @@ A Rust crate for generating Open Graph images for crates.io packages.
 
 ![Example OG Image](src/snapshots/crates_io_og_image__tests__generated_og_image.snap.png)
 
+> [!NOTE]
+> This crate is maintained by the crates.io team, primarily for use by crates.io and docs.rs, and not intended for external use. This crate may make major changes to its APIs or be deprecated without warning.
+
 ## Overview
 
 `crates_io_og_image` is a specialized library for generating visually appealing Open Graph images for Rust crates. These images are designed to be displayed when crates.io links are shared on social media platforms, providing rich visual context about the crate including its name, description, authors, and key metrics.
