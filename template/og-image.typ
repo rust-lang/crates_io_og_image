@@ -4,10 +4,19 @@
 // This template generates Open Graph images for crates.io crate.
 
 // =============================================================================
-// COLOR PALETTE
+// DATA LOADING
+// =============================================================================
+// Load data from sys.inputs first so we can determine the theme
+
+#let data = json(bytes(sys.inputs.data))
+#let avatar_map = json(bytes(sys.inputs.at("avatar_map", default: "{}")))
+#let theme = json(bytes(sys.inputs.at("theme", default: "\"CratesIo\"")))
+
+// =============================================================================
+// COLOR PALETTES
 // =============================================================================
 
-#let colors = (
+#let colors-crates-io = (
     bg: oklch(97%, 0.0147, 98deg),
     rust-overlay: oklch(36%, 0.07, 144deg, 20%),
     header-bg: oklch(36%, 0.07, 144deg),
@@ -20,6 +29,27 @@
     tag-bg: oklch(36%, 0.07, 144deg),
     tag-text: oklch(100%, 0, 0deg),
 )
+
+#let colors-docs-rs = (
+    bg: oklch(100%, 0, 0deg),
+    rust-overlay: oklch(0%, 0, 0deg, 20%),
+    header-bg: oklch(0%, 0, 0deg),
+    header-text: oklch(100%, 0, 0deg),
+    primary: oklch(0%, 0, 0deg),
+    text: oklch(20%, 0, 0deg),
+    text-light: oklch(40%, 0, 0deg),
+    avatar-bg: oklch(100%, 0, 0deg),
+    avatar-border: oklch(80%, 0, 0deg),
+    tag-bg: oklch(0%, 0, 0deg),
+    tag-text: oklch(100%, 0, 0deg),
+)
+
+// Set colors based on theme
+#let colors = if theme == "DocsRs" {
+    colors-docs-rs
+} else {
+    colors-crates-io
+}
 
 // =============================================================================
 // LAYOUT CONSTANTS
@@ -221,12 +251,19 @@
 // =============================================================================
 // Reusable components for consistent styling
 
-#let render-header = {
+#let render-header(theme) = {
     rect(width: 100%, height: header-height, fill: colors.header-bg, {
         place(left + horizon, dx: 30pt, {
-            box(baseline: 30%, image("assets/cargo.png", width: 35pt))
-            h(10pt)
-            text(size: 22pt, fill: colors.header-text, weight: "semibold")[crates.io]
+            if theme == "DocsRs" {
+                // Use white version of the docs.rs logo on dark background
+                box(baseline: 30%, image("assets/docs-rs-logo.svg", width: 35pt))
+                h(10pt)
+                text(size: 22pt, fill: colors.header-text, weight: "semibold")[docs.rs]
+            } else {
+                box(baseline: 30%, image("assets/cargo.png", width: 35pt))
+                h(10pt)
+                text(size: 22pt, fill: colors.header-text, weight: "semibold")[crates.io]
+            }
         })
     })
 }
@@ -253,22 +290,14 @@
 }
 
 // =============================================================================
-// DATA LOADING
-// =============================================================================
-// Load data from sys.inputs
-
-#let data = json(bytes(sys.inputs.data))
-#let avatar_map = json(bytes(sys.inputs.at("avatar_map", default: "{}")))
-
-// =============================================================================
 // MAIN DOCUMENT
 // =============================================================================
 
 #set page(width: 600pt, height: 315pt, margin: 0pt, fill: colors.bg)
 #set text(font: "Fira Sans", fill: colors.text)
 
-// Header with crates.io branding
-#render-header
+// Header with theme-based branding
+#render-header(theme)
 
 // Bottom border accent
 #place(bottom,
