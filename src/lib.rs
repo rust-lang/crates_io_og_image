@@ -182,9 +182,8 @@ impl OgImageGenerator {
     /// Sets the font path for the Typst compiler.
     ///
     /// This allows specifying a custom directory where Typst will look for fonts
-    /// during compilation. Setting a custom font directory implies using the
-    /// `--ignore-system-fonts` flag of the Typst CLI. If not set, Typst will
-    /// use its default font discovery.
+    /// during compilation in addition to the default system font discovery.
+    /// If not set, Typst will use only its default font discovery.
     ///
     /// # Examples
     ///
@@ -442,9 +441,8 @@ impl OgImageGenerator {
         if let Some(font_path) = &self.typst_font_path {
             debug!(font_path = %font_path.display(), "Using custom font path");
             command.arg("--font-path").arg(font_path);
-            command.arg("--ignore-system-fonts");
         } else {
-            debug!("Using system font discovery");
+            debug!("Using only system fonts");
         }
 
         // Pass input and output file paths
