@@ -8,4 +8,10 @@
     ":semanticCommitsDisabled",
     "customManagers:githubActionsVersions",
   ],
+  packageRules: [
+    {
+      matchManagers: ["cargo"],
+      rangeStrategy: "bump",
+    },
+  ],
 }
