@@ -868,4 +868,59 @@ mod tests {
             insta::assert_binary_snapshot!("unicode-truncation.png", image_data);
         }
     }
+
+    #[tokio::test]
+    async fn test_generate_og_image_emoji_description() {
+        let _guard = init_tracing();
+
+        static AUTHORS: &[OgImageAuthorData<'_>] = &[author("emoji-lover")];
+
+        let data = OgImageData {
+            name: "emoji-crate",
+            version: "1.0.0",
+            description: Some(
+                "🚀 A super cool crate with lots of emojis! 😎✨ Features include: 🔥 blazing fast performance, 🛡️ memory safety, and 🎨 beautiful APIs. Perfect for building amazing applications! 🌟💯 This description contains various emoji types including: flags 🏁🇺🇸🇯🇵, symbols ⚡🔮🎯, faces 😀😂🤔, objects 📦🔧⚙️, and more complex ones like 👨‍💻👩‍🚀🏳️‍🌈",
+            ),
+            license: Some("MIT"),
+            tags: &["emoji", "fun", "unicode"],
+            authors: AUTHORS,
+            lines_of_code: Some(2500),
+            crate_size: 64000,
+            releases: 7,
+        };
+
+        if let Some(image_data) = generate_image(data).await {
+            insta::assert_binary_snapshot!("emoji-description.png", image_data);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_generate_og_image_asian_text_description() {
+        let _guard = init_tracing();
+
+        static AUTHORS: &[OgImageAuthorData<'_>] = &[author("アジア開発者")];
+
+        let data = OgImageData {
+            name: "internationalization-crate",
+            version: "1.0.0",
+            description: Some(
+                "这是一个支持多种亚洲语言的包。包含中文（简体和繁體）、日本語、한국어支持。本包装提供了强大的国际化功能，能够处理各种复杂的文字系统和字符编码。特别适合需要处理多语言文本的应用程序。機能には文字列処理、エンコーディング変換、로케일 지원이 포함됩니다。这个描述很长，用来测试文本截断功能是否能正确处理多字节字符边界问题。",
+            ),
+            license: Some("MIT"),
+            tags: &[
+                "internationalization",
+                "multilang",
+                "unicode",
+                "text-processing",
+            ],
+            authors: AUTHORS,
+            lines_of_code: Some(8000),
+            crate_size: 256000,
+            releases: 12,
+        };
+
+        if let Some(image_data) = generate_image(data).await {
+            insta::assert_binary_snapshot!("asian-text-description.png", image_data);
+        }
+    }
 }
