@@ -62,5 +62,15 @@ jobs:
     - name: Run tests
       run: cargo test
       env:
+        # Write new snapshots into `.snap.new` files (for diffing via CI artifacts).
+        INSTA_UPDATE: new
         # Set the path to the Fira Sans font for Typst.
         TYPST_FONT_PATH: ${{ github.workspace }}/Fira-4.202/otf
+
+    - name: Upload snapshot artifacts on test failure
+      if: failure()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: test-snapshots
+        path: src/snapshots/
+        retention-days: 7
