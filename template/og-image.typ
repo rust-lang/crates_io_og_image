@@ -265,7 +265,7 @@
 // =============================================================================
 
 #set page(width: 600pt, height: 315pt, margin: 0pt, fill: colors.bg)
-#set text(font: "Fira Sans", fill: colors.text)
+#set text(font: ("Fira Sans", "Noto Color Emoji", "Noto Sans CJK SC"), fill: colors.text)
 
 // Header with crates.io branding
 #render-header
