@@ -93,6 +93,17 @@
 }
 
 // =============================================================================
+// WHITESPACE NORMALIZATION
+// =============================================================================
+// Function to normalize whitespace to mimic HTML browser behavior
+
+// Normalizes whitespace to mimic HTML browser behavior (CSS white-space: normal)
+// Collapses consecutive whitespace characters into single spaces and trims
+#let normalize_whitespace(text) = {
+    text.replace(regex("\\s+"), " ").trim()
+}
+
+// =============================================================================
 // IMAGE UTILITIES
 // =============================================================================
 // Functions for loading and processing images
@@ -302,7 +313,7 @@
 
         // Description
         if data.at("description", default: none) != none {
-            block(text(size: 14pt, weight: "regular", truncate_to_height(data.description, maxHeight: 60pt)))
+            block(text(size: 14pt, weight: "regular", truncate_to_height(normalize_whitespace(data.description), maxHeight: 60pt)))
         }
 
         // Authors
