@@ -898,4 +898,29 @@ mod tests {
             insta::assert_binary_snapshot!("asian-text-description.png", image_data);
         }
     }
+
+    #[tokio::test]
+    async fn test_generate_og_image_whitespace_handling() {
+        let _guard = init_tracing();
+
+        static AUTHORS: &[OgImageAuthorData<'_>] = &[author("test-author")];
+
+        let data = OgImageData {
+            name: "whitespace-test-crate",
+            version: "1.0.0",
+            description: Some(
+                "This description contains various whitespace characters:\n\nNewlines (\\n),\r\nWindows line endings (\\r\\n),\r\rCarriage returns (\\r),\t\tTabs (\\t),    Multiple spaces,\u{00A0}Non-breaking spaces,\u{2000}\u{2001}\u{2002}Unicode spaces, and     mixed    \t\n\r  whitespace   \t\n  patterns.    This tests how the template handles all types of whitespace normalization and rendering behavior.",
+            ),
+            license: Some("MIT"),
+            tags: &["whitespace", "testing", "normalization"],
+            authors: AUTHORS,
+            lines_of_code: Some(1500),
+            crate_size: 50000,
+            releases: 2,
+        };
+
+        if let Some(image_data) = generate_image(data).await {
+            insta::assert_binary_snapshot!("whitespace-handling.png", image_data);
+        }
+    }
 }
