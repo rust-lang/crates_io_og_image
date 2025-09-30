@@ -339,7 +339,7 @@
                 }
                 render-metadata("Latest", truncate_to_width("v" + data.version, maxWidth: 80pt), "code-branch")
                 if data.at("license", default: none) != none {
-                    render-metadata("License", truncate_to_width(data.license, maxWidth: 100pt), "scale-balanced")
+                    render-metadata("License", truncate_to_width(data.license, maxWidth: 140pt), "scale-balanced")
                 }
                 if data.at("lines_of_code", default: none) != none {
                     render-metadata("SLoC", data.lines_of_code, "code")
