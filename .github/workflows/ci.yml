@@ -60,6 +60,8 @@ jobs:
       with:
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
+    - run: cargo fetch --locked
+
     - name: Check formatting
       run: cargo fmt -- --check
 
