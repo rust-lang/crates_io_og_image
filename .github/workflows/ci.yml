@@ -10,6 +10,8 @@ permissions: {}
 
 env:
   CARGO_TERM_COLOR: always
+  # renovate: datasource=github-releases depName=cargo-insta lookupName=mitsuhiko/insta versioning=semver
+  CARGO_INSTA_VERSION: 1.43.2
   # renovate: datasource=github-releases depName=shssoichiro/oxipng versioning=semver
   OXIPNG_VERSION: 9.1.5
   # renovate: datasource=github-releases depName=typst/typst versioning=semver
@@ -27,6 +29,9 @@ jobs:
 
     - run: rustup component add rustfmt
     - run: rustup component add clippy
+
+    - name: Install cargo-insta
+      run: curl -LsSf https://github.com/mitsuhiko/insta/releases/download/${CARGO_INSTA_VERSION}/cargo-insta-installer.sh | sh
 
     - name: Install Typst
       run: |
@@ -69,7 +74,7 @@ jobs:
       run: cargo clippy -- -D warnings
 
     - name: Run tests
-      run: cargo test
+      run: cargo insta test --require-full-match --unreferenced=reject --workspace
       env:
         # Write new snapshots into `.snap.new` files (for diffing via CI artifacts).
         INSTA_UPDATE: new
