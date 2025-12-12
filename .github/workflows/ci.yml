@@ -13,7 +13,7 @@ env:
   # renovate: datasource=github-releases depName=shssoichiro/oxipng versioning=semver
   OXIPNG_VERSION: 9.1.5
   # renovate: datasource=github-releases depName=typst/typst versioning=semver
-  TYPST_VERSION: 0.14.0
+  TYPST_VERSION: 0.14.2
 
 jobs:
   ci:
