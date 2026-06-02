@@ -56,7 +56,7 @@ jobs:
         # Download Noto CJK font
         wget -q "https://github.com/notofonts/noto-cjk/raw/refs/tags/Sans2.004/Sans/OTC/NotoSansCJK-Regular.ttc" -O .fonts/NotoSansCJK-Regular.ttc
 
-    - uses: Swatinem/rust-cache@f13886b937689c021905a6b90929199931d60db1 # v2.8.1
+    - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       with:
         save-if: ${{ github.ref == 'refs/heads/main' }}
 
