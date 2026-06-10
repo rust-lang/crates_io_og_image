@@ -73,16 +73,16 @@ impl<'a> OgImageAuthorData<'a> {
 pub struct OgImageGenerator {
     typst_binary_path: PathBuf,
     typst_font_path: Option<PathBuf>,
-    oxipng_binary_path: PathBuf,
+    #[cfg(feature = "oxipng")]
+    optimize_png: bool,
 }
 
 impl OgImageGenerator {
-    /// Creates a new `OgImageGenerator` with default binary paths.
+    /// Creates a new `OgImageGenerator` with the default Typst binary path.
     ///
-    /// Uses "typst" and "oxipng" as default binary paths, assuming they are
-    /// available in PATH. Use [`with_typst_path()`](Self::with_typst_path) and
-    /// [`with_oxipng_path()`](Self::with_oxipng_path) to customize the
-    /// binary paths.
+    /// Uses "typst" as the default binary path, assuming it is available in
+    /// PATH. Use [`with_typst_path()`](Self::with_typst_path) to customize the
+    /// binary path.
     ///
     /// # Examples
     ///
@@ -132,7 +132,6 @@ impl OgImageGenerator {
     pub fn from_environment() -> Result<Self, OgImageError> {
         let typst_path = var("TYPST_PATH").map_err(OgImageError::EnvVarError)?;
         let font_path = var("TYPST_FONT_PATH").map_err(OgImageError::EnvVarError)?;
-        let oxipng_path = var("OXIPNG_PATH").map_err(OgImageError::EnvVarError)?;
 
         let mut generator = OgImageGenerator::default();
 
@@ -149,13 +148,6 @@ impl OgImageGenerator {
         } else {
             debug!("No custom font path specified, using Typst default font discovery");
         }
-
-        if let Some(ref path) = oxipng_path {
-            debug!(oxipng_path = %path, "Using custom oxipng binary path from environment");
-            generator.oxipng_binary_path = PathBuf::from(path);
-        } else {
-            debug!("OXIPNG_PATH not set, defaulting to 'oxipng' in PATH");
-        };
 
         Ok(generator)
     }
@@ -199,22 +191,21 @@ impl OgImageGenerator {
         self
     }
 
-    /// Sets the oxipng binary path for PNG optimization.
+    /// Enables in-process PNG optimization using the `oxipng` library.
     ///
-    /// This allows specifying a custom path to the oxipng binary for PNG optimization.
-    /// If not set, defaults to "oxipng" which assumes the binary is available in PATH.
+    /// Optimization is disabled by default. Failures are logged and never abort
+    /// image generation, so optimization remains best-effort.
     ///
     /// # Examples
     ///
     /// ```
-    /// use std::path::PathBuf;
     /// use crates_io_og_image::OgImageGenerator;
     ///
-    /// let generator = OgImageGenerator::default()
-    ///     .with_oxipng_path(PathBuf::from("/usr/local/bin/oxipng"));
+    /// let generator = OgImageGenerator::default().with_oxipng();
     /// ```
-    pub fn with_oxipng_path(mut self, oxipng_path: PathBuf) -> Self {
-        self.oxipng_binary_path = oxipng_path;
+    #[cfg(feature = "oxipng")]
+    pub fn with_oxipng(mut self) -> Self {
+        self.optimize_png = true;
         self
     }
 
@@ -490,7 +481,10 @@ impl OgImageGenerator {
         );
 
         // After successful Typst compilation, optimize the PNG
-        self.optimize_png(output_file.path()).await;
+        #[cfg(feature = "oxipng")]
+        if self.optimize_png {
+            Self::optimize_png(output_file.path()).await;
+        }
 
         let duration = start_time.elapsed();
         info!(
@@ -500,56 +494,47 @@ impl OgImageGenerator {
         Ok(output_file)
     }
 
-    /// Optimizes a PNG file using oxipng.
+    /// Optimizes a PNG file in place using the `oxipng` library.
     ///
     /// This method attempts to reduce the file size of a PNG using lossless compression.
     /// All errors are handled internally and logged as warnings. The method never fails
     /// to ensure PNG optimization is truly optional.
-    async fn optimize_png(&self, png_file: &Path) {
-        debug!(
-            input_file = %png_file.display(),
-            oxipng_path = %self.oxipng_binary_path.display(),
-            "Starting PNG optimization"
-        );
+    #[cfg(feature = "oxipng")]
+    async fn optimize_png(png_file: &Path) {
+        use oxipng::{InFile, Options, OutFile, StripChunks};
+
+        debug!(input_file = %png_file.display(), "Starting PNG optimization");
 
         let start_time = std::time::Instant::now();
 
-        let mut command = Command::new(&self.oxipng_binary_path);
+        let path = png_file.to_path_buf();
+        let result = tokio::task::spawn_blocking(move || {
+            let input = InFile::from(path);
+            // `path: None` writes the output back to the input file.
+            let output = OutFile::Path {
+                path: None,
+                preserve_attrs: false,
+            };
 
-        // Default optimization level for speed/compression balance
-        command.arg("--opt").arg("2");
+            let mut options = Options::from_preset(2);
+            options.strip = StripChunks::Safe;
 
-        // Remove safe-to-remove metadata
-        command.arg("--strip").arg("safe");
+            oxipng::optimize(&input, &output, &options)
+        })
+        .await;
 
-        // Overwrite the input PNG file
-        command.arg(png_file);
-
-        // Clear environment variables to avoid leaking sensitive data
-        command.env_clear();
-
-        // Preserve environment variables needed for running oxipng
-        if let Ok(path) = std::env::var("PATH") {
-            command.env("PATH", path);
-        }
-
-        let output = command.output().await;
         let duration = start_time.elapsed();
 
-        match output {
-            Ok(output) if output.status.success() => {
+        match result {
+            Ok(Ok((input_size, output_size))) => {
                 debug!(
                     duration_ms = duration.as_millis(),
-                    "PNG optimization completed successfully"
+                    "PNG optimization reduced image from {input_size} to {output_size} bytes"
                 );
             }
-            Ok(output) => {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let stdout = String::from_utf8_lossy(&output.stdout);
+            Ok(Err(err)) => {
                 warn!(
-                    exit_code = ?output.status.code(),
-                    stderr = %stderr,
-                    stdout = %stdout,
+                    error = %err,
                     duration_ms = duration.as_millis(),
                     input_file = %png_file.display(),
                     "PNG optimization failed, continuing with unoptimized image"
@@ -559,8 +544,7 @@ impl OgImageGenerator {
                 warn!(
                     error = %err,
                     input_file = %png_file.display(),
-                    oxipng_path = %self.oxipng_binary_path.display(),
-                    "Failed to execute oxipng, continuing with unoptimized image"
+                    "PNG optimization task panicked, continuing with unoptimized image"
                 );
             }
         }
@@ -568,14 +552,15 @@ impl OgImageGenerator {
 }
 
 impl Default for OgImageGenerator {
-    /// Creates a default `OgImageGenerator` with default binary paths.
+    /// Creates a default `OgImageGenerator` with the default Typst binary path.
     ///
-    /// Uses "typst" and "oxipng" as default binary paths, assuming they are available in PATH.
+    /// Uses "typst" as the default binary path, assuming it is available in PATH.
     fn default() -> Self {
         Self {
             typst_binary_path: PathBuf::from("typst"),
             typst_font_path: None,
-            oxipng_binary_path: PathBuf::from("oxipng"),
+            #[cfg(feature = "oxipng")]
+            optimize_png: false,
         }
     }
 }
@@ -753,6 +738,11 @@ mod tests {
     async fn generate_image(data: OgImageData<'_>) -> Option<Vec<u8>> {
         let generator =
             OgImageGenerator::from_environment().expect("Failed to create OgImageGenerator");
+
+        // Snapshots are optimized PNGs, so the tests must opt into optimization.
+        // The `cfg` keeps the test binary compiling under `--no-default-features`.
+        #[cfg(feature = "oxipng")]
+        let generator = generator.with_oxipng();
 
         let temp_file = generator
             .generate(data)
