@@ -1,15 +1,10 @@
 //! Error types for the crates_io_og_image crate.
 
-use std::path::PathBuf;
 use thiserror::Error;
 
 /// Errors that can occur when generating OpenGraph images.
 #[derive(Debug, Error)]
 pub enum OgImageError {
-    /// Failed to find or execute the Typst binary.
-    #[error("Failed to find or execute Typst binary: {0}")]
-    TypstNotFound(#[source] std::io::Error),
-
     /// Environment variable error.
     #[error("Environment variable error: {0}")]
     EnvVarError(std::env::VarError),
@@ -22,31 +17,15 @@ pub enum OgImageError {
         source: reqwest::Error,
     },
 
-    /// Failed to write avatar to file.
-    #[error("Failed to write avatar to file at {path:?}: {source}")]
-    AvatarWriteError {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-
     /// JSON serialization error.
     #[error("JSON serialization error: {0}")]
     JsonSerializationError(#[source] serde_json::Error),
 
     /// Typst compilation failed.
-    #[error("Typst compilation failed: {stderr}")]
-    TypstCompilationError {
-        stderr: String,
-        stdout: String,
-        exit_code: Option<i32>,
-    },
+    #[error("Typst compilation failed:\n{0}")]
+    TypstCompilation(String),
 
-    /// I/O error.
-    #[error("I/O error: {0}")]
-    IoError(#[from] std::io::Error),
-
-    /// Temporary directory creation error.
-    #[error("Failed to create temporary directory: {0}")]
-    TempDirError(std::io::Error),
+    /// The Typst compilation task panicked.
+    #[error("Typst compilation panicked: {0}")]
+    TypstTaskPanic(String),
 }

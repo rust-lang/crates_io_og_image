@@ -30,10 +30,12 @@ oxipng = { version = "10.1.1", optional = true, default-features = false, featur
 reqwest = "0.13.4"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
-tempfile = "3.27.0"
 thiserror = "2.0.18"
-tokio = { version = "1.52.3", features = ["process", "fs"] }
+tokio = { version = "1.52.3", features = ["rt"] }
 tracing = "0.1.44"
+typst = "0.14.2"
+typst-kit = { version = "0.14.2", default-features = false, features = ["fonts"] }
+typst-render = "0.14.2"
 
 [dev-dependencies]
 insta = "=1.47.2"
