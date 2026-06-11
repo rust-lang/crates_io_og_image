@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "crates_io_og_image"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "insta",
  "mockito",
