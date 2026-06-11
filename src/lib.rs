@@ -731,7 +731,7 @@ mod tests {
         }
     }
 
-    async fn generate_image(data: OgImageData<'_>) -> Option<Vec<u8>> {
+    async fn generate_image(data: OgImageData<'_>) -> Vec<u8> {
         let generator =
             OgImageGenerator::from_environment().expect("Failed to create OgImageGenerator");
 
@@ -740,12 +740,10 @@ mod tests {
         #[cfg(feature = "oxipng")]
         let generator = generator.with_oxipng();
 
-        let image = generator
+        generator
             .generate(data)
             .await
-            .expect("Failed to generate image");
-
-        Some(image)
+            .expect("Failed to generate image")
     }
 
     #[tokio::test]
@@ -753,9 +751,8 @@ mod tests {
         let _guard = init_tracing();
         let data = create_simple_test_data();
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("generated_og_image.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("generated_og_image.png", image_data);
     }
 
     #[tokio::test]
@@ -768,9 +765,8 @@ mod tests {
         let authors = create_overflow_authors(&server_url);
         let data = create_overflow_test_data(&authors);
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("generated_og_image_overflow.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("generated_og_image_overflow.png", image_data);
     }
 
     #[tokio::test]
@@ -778,9 +774,8 @@ mod tests {
         let _guard = init_tracing();
         let data = create_minimal_test_data();
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("generated_og_image_minimal.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("generated_og_image_minimal.png", image_data);
     }
 
     #[tokio::test]
@@ -793,9 +788,8 @@ mod tests {
         let authors = create_escaping_authors(&server_url);
         let data = create_escaping_test_data(&authors);
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("generated_og_image_escaping.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("generated_og_image_escaping.png", image_data);
     }
 
     #[tokio::test]
@@ -822,9 +816,8 @@ mod tests {
             releases: 1,
         };
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("404-avatar.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("404-avatar.png", image_data);
     }
 
     #[tokio::test]
@@ -850,9 +843,8 @@ mod tests {
             releases: 3,
         };
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("unicode-truncation.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("unicode-truncation.png", image_data);
     }
 
     #[tokio::test]
@@ -880,9 +872,8 @@ mod tests {
             releases: 12,
         };
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("asian-text-description.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("asian-text-description.png", image_data);
     }
 
     #[tokio::test]
@@ -905,8 +896,7 @@ mod tests {
             releases: 2,
         };
 
-        if let Some(image_data) = generate_image(data).await {
-            insta::assert_binary_snapshot!("whitespace-handling.png", image_data);
-        }
+        let image_data = generate_image(data).await;
+        insta::assert_binary_snapshot!("whitespace-handling.png", image_data);
     }
 }
