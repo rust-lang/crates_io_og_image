@@ -3,18 +3,21 @@
 mod env;
 mod error;
 mod formatting;
+mod typst;
 
 pub use error::OgImageError;
 
 use crate::env::var;
 use crate::formatting::{serialize_bytes, serialize_number, serialize_optional_number};
+use crate::typst::FontCache;
+use ::typst::foundations::{Bytes, Dict, IntoValue};
+use ::typst::syntax::FileId;
 use reqwest::StatusCode;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use tokio::fs;
-use tokio::process::Command;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
 use tracing::{debug, error, info, instrument, warn};
 
 /// Data structure containing information needed to generate an OpenGraph image
@@ -65,23 +68,29 @@ impl<'a> OgImageAuthorData<'a> {
     }
 }
 
+/// A downloaded avatar ready to be passed to the Typst compiler.
+struct AvatarFile {
+    /// The original avatar URL, used as the key in the avatar map.
+    source: String,
+    /// The local filename the template references (e.g. `avatar_0.png`).
+    filename: String,
+    /// The downloaded image bytes.
+    bytes: Bytes,
+}
+
 /// Generator for creating OpenGraph images using the Typst typesetting system.
-///
-/// This struct manages the path to the Typst binary and provides methods for
-/// generating PNG images from a Typst template.
 pub struct OgImageGenerator {
-    typst_binary_path: PathBuf,
     typst_font_path: Option<PathBuf>,
+    fonts: OnceLock<Arc<FontCache>>,
     #[cfg(feature = "oxipng")]
     optimize_png: bool,
 }
 
 impl OgImageGenerator {
-    /// Creates a new `OgImageGenerator` with the default Typst binary path.
+    /// Creates a new `OgImageGenerator`.
     ///
-    /// Uses "typst" as the default binary path, assuming it is available in
-    /// PATH. Use [`with_typst_path()`](Self::with_typst_path) to customize the
-    /// binary path.
+    /// Fonts are discovered from the system. Use
+    /// [`with_font_path()`](Self::with_font_path) to add a custom font directory.
     ///
     /// # Examples
     ///
@@ -114,10 +123,10 @@ impl OgImageGenerator {
         None
     }
 
-    /// Creates a new `OgImageGenerator` using the `TYPST_PATH` environment variable.
+    /// Creates a new `OgImageGenerator` using the `TYPST_FONT_PATH` environment variable.
     ///
-    /// If the `TYPST_PATH` environment variable is set, uses that path.
-    /// Otherwise, falls back to the default behavior (assumes "typst" is in PATH).
+    /// If the `TYPST_FONT_PATH` environment variable is set, uses that directory
+    /// as an additional font path. Otherwise, only system fonts are used.
     ///
     /// # Examples
     ///
@@ -129,17 +138,9 @@ impl OgImageGenerator {
     /// ```
     #[instrument]
     pub fn from_environment() -> Result<Self, OgImageError> {
-        let typst_path = var("TYPST_PATH").map_err(OgImageError::EnvVarError)?;
         let font_path = var("TYPST_FONT_PATH").map_err(OgImageError::EnvVarError)?;
 
         let mut generator = OgImageGenerator::default();
-
-        if let Some(ref path) = typst_path {
-            debug!(typst_path = %path, "Using custom Typst binary path from environment");
-            generator.typst_binary_path = PathBuf::from(path);
-        } else {
-            debug!("Using default Typst binary path (assumes 'typst' in PATH)");
-        };
 
         if let Some(ref font_path) = font_path {
             debug!(font_path = %font_path, "Setting custom font path from environment");
@@ -149,25 +150,6 @@ impl OgImageGenerator {
         }
 
         Ok(generator)
-    }
-
-    /// Sets the Typst binary path for the generator.
-    ///
-    /// This allows specifying a custom path to the Typst binary.
-    /// If not set, defaults to "typst" which assumes the binary is available in PATH.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use std::path::PathBuf;
-    /// use crates_io_og_image::OgImageGenerator;
-    ///
-    /// let generator = OgImageGenerator::default()
-    ///     .with_typst_path(PathBuf::from("/usr/local/bin/typst"));
-    /// ```
-    pub fn with_typst_path(mut self, typst_path: PathBuf) -> Self {
-        self.typst_binary_path = typst_path;
-        self
     }
 
     /// Sets the font path for the Typst compiler.
@@ -186,6 +168,10 @@ impl OgImageGenerator {
     ///     .with_font_path(PathBuf::from("/usr/share/fonts"));
     /// ```
     pub fn with_font_path(mut self, font_path: PathBuf) -> Self {
+        // Discard any font cache built from a previous path so the next
+        // generation rebuilds it from the new path.
+        self.fonts = OnceLock::new();
+
         self.typst_font_path = Some(font_path);
         self
     }
@@ -208,18 +194,28 @@ impl OgImageGenerator {
         self
     }
 
-    /// Processes avatars by downloading URLs and copying assets to the assets directory.
+    /// Returns the shared font cache, building it on first access.
     ///
-    /// This method handles both asset-based avatars (which are copied from the bundled assets)
-    /// and URL-based avatars (which are downloaded from the internet).
-    /// Returns a mapping from avatar source to the local filename.
+    /// Font discovery scans the system, so the result is cached for the lifetime
+    /// of the generator and reused across image generations.
+    fn fonts(&self) -> Arc<FontCache> {
+        self.fonts
+            .get_or_init(|| Arc::new(FontCache::load(self.typst_font_path.as_deref())))
+            .clone()
+    }
+
+    /// Downloads the avatars referenced by the authors.
+    ///
+    /// URL-based avatars are downloaded into memory and their image format is
+    /// detected to pick a file extension. Avatars that return 404 or have an
+    /// unsupported format are skipped. Returns one [`AvatarFile`] per
+    /// successfully downloaded avatar.
     #[instrument(skip(self, data), fields(krate.name = %data.name))]
-    async fn process_avatars<'a>(
+    async fn process_avatars(
         &self,
-        data: &'a OgImageData<'_>,
-        assets_dir: &Path,
-    ) -> Result<HashMap<&'a str, String>, OgImageError> {
-        let mut avatar_map = HashMap::new();
+        data: &OgImageData<'_>,
+    ) -> Result<Vec<AvatarFile>, OgImageError> {
+        let mut avatars = Vec::new();
 
         let client = reqwest::Client::new();
         for (index, author) in data.authors.iter().enumerate() {
@@ -288,43 +284,30 @@ impl OgImageGenerator {
                 };
 
                 let filename = format!("avatar_{index}.{extension}");
-                let avatar_path = assets_dir.join(&filename);
 
                 debug!(
                     author_name = %author.name,
                     avatar_url = %avatar,
-                    avatar_path = %avatar_path.display(),
-                    "Writing avatar file with detected format"
-                );
-
-                // Write the bytes to the avatar file
-                fs::write(&avatar_path, &bytes).await.map_err(|err| {
-                    OgImageError::AvatarWriteError {
-                        path: avatar_path.clone(),
-                        source: err,
-                    }
-                })?;
-
-                debug!(
-                    author_name = %author.name,
-                    path = %avatar_path.display(),
                     size_bytes = bytes.len(),
-                    "Avatar processed and written successfully"
+                    "Avatar processed successfully"
                 );
 
-                // Store the mapping from the avatar source to the numbered filename
-                avatar_map.insert(avatar.as_ref(), filename);
+                avatars.push(AvatarFile {
+                    source: avatar.to_string(),
+                    filename,
+                    bytes: Bytes::new(bytes),
+                });
             }
         }
 
-        Ok(avatar_map)
+        Ok(avatars)
     }
 
     /// Generates an OpenGraph image using the provided data.
     ///
-    /// This method creates a temporary directory with all the necessary files
-    /// to create the OpenGraph image, compiles it to PNG using the Typst
-    /// binary, and returns the resulting image as raw PNG bytes.
+    /// This method downloads the referenced avatars, compiles the bundled
+    /// template to PNG using the Typst library, and returns the resulting image
+    /// as raw PNG bytes.
     ///
     /// # Examples
     ///
@@ -359,116 +342,56 @@ impl OgImageGenerator {
         let start_time = std::time::Instant::now();
         info!("Starting OpenGraph image generation");
 
-        // Create a temporary folder
-        let temp_dir = tempfile::tempdir().map_err(OgImageError::TempDirError)?;
-        debug!(temp_dir = %temp_dir.path().display(), "Created temporary directory");
-
-        // Create assets directory and copy logo and icons
-        let assets_dir = temp_dir.path().join("assets");
-        debug!(assets_dir = %assets_dir.display(), "Creating assets directory");
-        fs::create_dir(&assets_dir).await?;
-
-        debug!("Copying bundled assets to temporary directory");
-        let cargo_logo = include_bytes!("../template/assets/cargo.png");
-        fs::write(assets_dir.join("cargo.png"), cargo_logo).await?;
-        let rust_logo_svg = include_bytes!("../template/assets/rust-logo.svg");
-        fs::write(assets_dir.join("rust-logo.svg"), rust_logo_svg).await?;
-
-        // Copy SVG icons
-        debug!("Copying SVG icon assets");
-        let code_branch_svg = include_bytes!("../template/assets/code-branch.svg");
-        fs::write(assets_dir.join("code-branch.svg"), code_branch_svg).await?;
-        let code_svg = include_bytes!("../template/assets/code.svg");
-        fs::write(assets_dir.join("code.svg"), code_svg).await?;
-        let scale_balanced_svg = include_bytes!("../template/assets/scale-balanced.svg");
-        fs::write(assets_dir.join("scale-balanced.svg"), scale_balanced_svg).await?;
-        let tag_svg = include_bytes!("../template/assets/tag.svg");
-        fs::write(assets_dir.join("tag.svg"), tag_svg).await?;
-        let weight_hanging_svg = include_bytes!("../template/assets/weight-hanging.svg");
-        fs::write(assets_dir.join("weight-hanging.svg"), weight_hanging_svg).await?;
-
-        // Process avatars - download URLs and copy assets
+        // Process avatars - download URLs into memory
         let avatar_start_time = std::time::Instant::now();
         info!("Processing avatars");
-        let avatar_map = self.process_avatars(&data, &assets_dir).await?;
+        let avatars = self.process_avatars(&data).await?;
         let avatar_duration = avatar_start_time.elapsed();
         info!(
-            avatar_count = avatar_map.len(),
+            avatar_count = avatars.len(),
             duration_ms = avatar_duration.as_millis(),
             "Avatar processing completed"
         );
-
-        // Copy the static Typst template file
-        let template_content = include_str!("../template/og-image.typ");
-        let typ_file_path = temp_dir.path().join("og-image.typ");
-        debug!(template_path = %typ_file_path.display(), "Copying Typst template");
-        fs::write(&typ_file_path, template_content).await?;
 
         // Serialize data and avatar_map to JSON
         debug!("Serializing data and avatar map to JSON");
         let json_data =
             serde_json::to_string(&data).map_err(OgImageError::JsonSerializationError)?;
 
+        let avatar_map: HashMap<&str, &str> = avatars
+            .iter()
+            .map(|avatar| (avatar.source.as_str(), avatar.filename.as_str()))
+            .collect();
         let json_avatar_map =
             serde_json::to_string(&avatar_map).map_err(OgImageError::JsonSerializationError)?;
 
-        // Run typst compile command with input data
-        info!("Running Typst compilation command");
-        let mut command = Command::new(&self.typst_binary_path);
-        command.arg("compile").arg("--format").arg("png");
+        let inputs: Dict = [("data", json_data), ("avatar_map", json_avatar_map)]
+            .into_iter()
+            .map(|(key, value)| (key.into(), value.into_value()))
+            .collect();
 
-        // Pass in the data and avatar map as JSON inputs
-        let input = format!("data={json_data}");
-        command.arg("--input").arg(input);
-        let input = format!("avatar_map={json_avatar_map}");
-        command.arg("--input").arg(input);
+        let avatar_files: HashMap<FileId, Bytes> = avatars
+            .into_iter()
+            .map(|avatar| {
+                let path = format!("assets/{}", avatar.filename);
+                (typst::file_id(&path), avatar.bytes)
+            })
+            .collect();
 
-        // Pass in the font path if specified
-        if let Some(font_path) = &self.typst_font_path {
-            debug!(font_path = %font_path.display(), "Using custom font path");
-            command.arg("--font-path").arg(font_path);
-        } else {
-            debug!("Using only system fonts");
-        }
-
-        // Pass input file path and compile to stdout
-        command.arg(&typ_file_path).arg("-");
-
-        // Clear environment variables to avoid leaking sensitive data
-        command.env_clear();
-
-        // Preserve environment variables needed for font discovery
-        if let Ok(path) = std::env::var("PATH") {
-            command.env("PATH", path);
-        }
-        if let Ok(home) = std::env::var("HOME") {
-            command.env("HOME", home);
-        }
-
+        // Compile the template to a PNG using the Typst library
+        info!("Compiling template with Typst");
         let compilation_start_time = std::time::Instant::now();
-        let output = command.output().await;
-        let output = output.map_err(OgImageError::TypstNotFound)?;
-        let compilation_duration = compilation_start_time.elapsed();
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            error!(
-                exit_code = ?output.status.code(),
-                stderr = %stderr,
-                stdout = %stdout,
-                duration_ms = compilation_duration.as_millis(),
-                "Typst compilation failed"
-            );
-            return Err(OgImageError::TypstCompilationError {
-                stderr,
-                stdout,
-                exit_code: output.status.code(),
-            });
-        }
+        let fonts = self.fonts();
+
+        let compiler = typst::Compiler::new(fonts, inputs, avatar_files);
 
         #[allow(unused_mut)]
-        let mut png_data = output.stdout;
+        let mut png_data = tokio::task::spawn_blocking(move || compiler.compile_png())
+            .await
+            .map_err(|err| OgImageError::TypstTaskPanic(err.to_string()))??;
+
+        let compilation_duration = compilation_start_time.elapsed();
         let output_size_bytes = png_data.len();
 
         debug!(
@@ -548,13 +471,11 @@ impl OgImageGenerator {
 }
 
 impl Default for OgImageGenerator {
-    /// Creates a default `OgImageGenerator` with the default Typst binary path.
-    ///
-    /// Uses "typst" as the default binary path, assuming it is available in PATH.
+    /// Creates a default `OgImageGenerator` using system font discovery.
     fn default() -> Self {
         Self {
-            typst_binary_path: PathBuf::from("typst"),
             typst_font_path: None,
+            fonts: OnceLock::new(),
             #[cfg(feature = "oxipng")]
             optimize_png: false,
         }
