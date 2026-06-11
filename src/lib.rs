@@ -436,8 +436,8 @@ impl OgImageGenerator {
             debug!("Using only system fonts");
         }
 
-        // Pass input and output file paths
-        command.arg(&typ_file_path).arg(output_file.path());
+        // Pass input file path and compile to stdout
+        command.arg(&typ_file_path).arg("-");
 
         // Clear environment variables to avoid leaking sensitive data
         command.env_clear();
@@ -472,8 +472,9 @@ impl OgImageGenerator {
             });
         }
 
-        let output_size_bytes = fs::metadata(output_file.path()).await;
-        let output_size_bytes = output_size_bytes.map(|m| m.len()).unwrap_or(0);
+        #[allow(unused_mut)]
+        let mut png_data = output.stdout;
+        let output_size_bytes = png_data.len();
 
         debug!(
             duration_ms = compilation_duration.as_millis(),
@@ -483,8 +484,11 @@ impl OgImageGenerator {
         // After successful Typst compilation, optimize the PNG
         #[cfg(feature = "oxipng")]
         if self.optimize_png {
-            Self::optimize_png(output_file.path()).await;
+            png_data = Self::optimize_png(png_data).await;
         }
+
+        let output_size_bytes = png_data.len();
+        fs::write(output_file.path(), &png_data).await?;
 
         let duration = start_time.elapsed();
         info!(
@@ -494,58 +498,57 @@ impl OgImageGenerator {
         Ok(output_file)
     }
 
-    /// Optimizes a PNG file in place using the `oxipng` library.
+    /// Optimizes PNG image data in memory using the `oxipng` library.
     ///
-    /// This method attempts to reduce the file size of a PNG using lossless compression.
-    /// All errors are handled internally and logged as warnings. The method never fails
-    /// to ensure PNG optimization is truly optional.
+    /// This method attempts to reduce the size of a PNG using lossless compression
+    /// and returns the optimized data. On failure it returns the original data
+    /// unchanged. All errors are handled internally and logged as warnings to
+    /// ensure PNG optimization is truly optional.
     #[cfg(feature = "oxipng")]
-    async fn optimize_png(png_file: &Path) {
-        use oxipng::{InFile, Options, OutFile, StripChunks};
+    async fn optimize_png(data: Vec<u8>) -> Vec<u8> {
+        use oxipng::{Options, StripChunks};
+        use std::sync::Arc;
 
-        debug!(input_file = %png_file.display(), "Starting PNG optimization");
+        let input_size = data.len();
+        debug!("Starting PNG optimization");
 
         let start_time = std::time::Instant::now();
 
-        let path = png_file.to_path_buf();
+        let data = Arc::new(data);
+        let task_data = data.clone();
         let result = tokio::task::spawn_blocking(move || {
-            let input = InFile::from(path);
-            // `path: None` writes the output back to the input file.
-            let output = OutFile::Path {
-                path: None,
-                preserve_attrs: false,
-            };
-
             let mut options = Options::from_preset(2);
             options.strip = StripChunks::Safe;
 
-            oxipng::optimize(&input, &output, &options)
+            oxipng::optimize_from_memory(&task_data, &options)
         })
         .await;
 
         let duration = start_time.elapsed();
 
         match result {
-            Ok(Ok((input_size, output_size))) => {
+            Ok(Ok(optimized)) => {
+                let output_size = optimized.len();
                 debug!(
                     duration_ms = duration.as_millis(),
                     "PNG optimization reduced image from {input_size} to {output_size} bytes"
                 );
+                optimized
             }
             Ok(Err(err)) => {
                 warn!(
                     error = %err,
                     duration_ms = duration.as_millis(),
-                    input_file = %png_file.display(),
                     "PNG optimization failed, continuing with unoptimized image"
                 );
+                Arc::unwrap_or_clone(data)
             }
             Err(err) => {
                 warn!(
                     error = %err,
-                    input_file = %png_file.display(),
                     "PNG optimization task panicked, continuing with unoptimized image"
                 );
+                Arc::unwrap_or_clone(data)
             }
         }
     }
