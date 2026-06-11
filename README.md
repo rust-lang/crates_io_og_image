@@ -57,10 +57,10 @@ async fn main() -> Result<(), OgImageError> {
     };
 
     // Generate the image
-    let temp_file = generator.generate(data).await?;
+    let image = generator.generate(data).await?;
 
-    // The temp_file contains the path to the generated PNG image
-    println!("Image generated at: {}", temp_file.path().display());
+    // `image` contains the raw PNG bytes
+    println!("Generated image: {} bytes", image.len());
 
     Ok(())
 }

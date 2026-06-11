@@ -46,10 +46,6 @@ pub enum OgImageError {
     #[error("I/O error: {0}")]
     IoError(#[from] std::io::Error),
 
-    /// Temporary file creation error.
-    #[error("Failed to create temporary file: {0}")]
-    TempFileError(std::io::Error),
-
     /// Temporary directory creation error.
     #[error("Failed to create temporary directory: {0}")]
     TempDirError(std::io::Error),
