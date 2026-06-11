@@ -2,7 +2,7 @@
 
 A Rust crate for generating Open Graph images for crates.io packages.
 
-![Example OG Image](src/snapshots/crates_io_og_image__tests__generated_og_image.snap.png)
+![Example OG Image](tests/snapshots/generate__generated_og_image.snap.png)
 
 > [!NOTE]
 > This crate is maintained by the crates.io team, primarily for use by crates.io and docs.rs, and not intended for external use. This crate may make major changes to its APIs or be deprecated without warning.
