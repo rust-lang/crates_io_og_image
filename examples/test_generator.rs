@@ -42,14 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         releases: 5,
     };
     match generator.generate(data).await {
-        Ok(temp_file) => {
+        Ok(image) => {
             let output_path = "test_og_image.png";
-            std::fs::copy(temp_file.path(), output_path)?;
+            std::fs::write(output_path, &image)?;
             println!("Successfully generated image at: {output_path}");
-            println!(
-                "Image file size: {} bytes",
-                std::fs::metadata(output_path)?.len()
-            );
+            println!("Image file size: {} bytes", image.len());
         }
         Err(error) => {
             println!("Failed to generate image: {error}");

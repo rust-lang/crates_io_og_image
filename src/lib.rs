@@ -13,7 +13,6 @@ use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tempfile::NamedTempFile;
 use tokio::fs;
 use tokio::process::Command;
 use tracing::{debug, error, info, instrument, warn};
@@ -325,7 +324,7 @@ impl OgImageGenerator {
     ///
     /// This method creates a temporary directory with all the necessary files
     /// to create the OpenGraph image, compiles it to PNG using the Typst
-    /// binary, and returns the resulting image as a `NamedTempFile`.
+    /// binary, and returns the resulting image as raw PNG bytes.
     ///
     /// # Examples
     ///
@@ -346,8 +345,8 @@ impl OgImageGenerator {
     ///     crate_size: 100,
     ///     releases: 10,
     /// };
-    /// let image_file = generator.generate(data).await?;
-    /// println!("Generated image at: {:?}", image_file.path());
+    /// let image = generator.generate(data).await?;
+    /// println!("Generated image: {} bytes", image.len());
     /// # Ok(())
     /// # }
     /// ```
@@ -356,7 +355,7 @@ impl OgImageGenerator {
         crate.version = %data.version,
         author_count = data.authors.len(),
     ))]
-    pub async fn generate(&self, data: OgImageData<'_>) -> Result<NamedTempFile, OgImageError> {
+    pub async fn generate(&self, data: OgImageData<'_>) -> Result<Vec<u8>, OgImageError> {
         let start_time = std::time::Instant::now();
         info!("Starting OpenGraph image generation");
 
@@ -404,10 +403,6 @@ impl OgImageGenerator {
         let typ_file_path = temp_dir.path().join("og-image.typ");
         debug!(template_path = %typ_file_path.display(), "Copying Typst template");
         fs::write(&typ_file_path, template_content).await?;
-
-        // Create a named temp file for the output PNG
-        let output_file = NamedTempFile::new().map_err(OgImageError::TempFileError)?;
-        debug!(output_path = %output_file.path().display(), "Created output file");
 
         // Serialize data and avatar_map to JSON
         debug!("Serializing data and avatar map to JSON");
@@ -488,14 +483,12 @@ impl OgImageGenerator {
         }
 
         let output_size_bytes = png_data.len();
-        fs::write(output_file.path(), &png_data).await?;
-
         let duration = start_time.elapsed();
         info!(
             duration_ms = duration.as_millis(),
             output_size_bytes, "OpenGraph image generation completed successfully"
         );
-        Ok(output_file)
+        Ok(png_data)
     }
 
     /// Optimizes PNG image data in memory using the `oxipng` library.
@@ -747,12 +740,12 @@ mod tests {
         #[cfg(feature = "oxipng")]
         let generator = generator.with_oxipng();
 
-        let temp_file = generator
+        let image = generator
             .generate(data)
             .await
             .expect("Failed to generate image");
 
-        Some(std::fs::read(temp_file.path()).expect("Failed to read generated image"))
+        Some(image)
     }
 
     #[tokio::test]
