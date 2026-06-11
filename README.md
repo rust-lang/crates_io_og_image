@@ -25,7 +25,6 @@ The generated images include:
 - The [Fira Sans](https://github.com/mozilla/Fira) font must be installed on your system (or configured via the `TYPST_FONT_PATH` environment variable).
 - The [Noto CJK](https://github.com/notofonts/noto-cjk) font may optionally be installed for CJK character support.
 - The [Noto Color Emoji](https://github.com/googlefonts/noto-emoji/) font may optionally be installed for Emoji support.
-- The [oxipng](https://github.com/shssoichiro/oxipng) CLI may optionally be installed for PNG file size optimization.
 
 ## Usage
 
@@ -73,7 +72,10 @@ The following environment variables can be used to configure the image generatio
 
 - `TYPST_PATH` - Path to the Typst CLI binary
 - `TYPST_FONT_PATH` - Additional font directory
-- `OXIPNG_PATH` - Path to the `oxipng` binary for PNG optimization
+
+### Cargo Features
+
+- `oxipng` (enabled by default) - Bundles the [oxipng](https://github.com/shssoichiro/oxipng) library for lossless PNG file size optimization. Disable it with `default-features = false`. When enabled, call `OgImageGenerator::with_oxipng()` to optimize generated images.
 
 ## Development
 
