@@ -34,7 +34,7 @@ thiserror = "2.0.18"
 tokio = { version = "1.52.3", features = ["rt"] }
 tracing = "0.1.44"
 typst = "0.14.2"
-typst-kit = { version = "0.14.2", default-features = false, features = ["fonts"] }
+typst-kit = { version = "0.15.0", default-features = false, features = ["fonts"] }
 typst-render = "0.14.2"
 
 [dev-dependencies]
