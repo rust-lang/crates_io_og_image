@@ -5,12 +5,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use ::typst::diag::{FileError, FileResult, Warned};
-use ::typst::foundations::{Bytes, Datetime, Dict};
-use ::typst::layout::PagedDocument;
+use ::typst::foundations::{Bytes, Datetime, Dict, Duration};
 use ::typst::syntax::{FileId, Source};
 use ::typst::text::{Font, FontBook};
-use ::typst::utils::LazyHash;
+use ::typst::utils::{LazyHash, Scalar};
 use ::typst::{Library, LibraryExt, World};
+use typst_layout::PagedDocument;
+use typst_render::RenderOptions;
 
 use super::assets::{ASSETS, MAIN_SOURCE};
 use super::diagnostics::{format_diagnostic, format_diagnostics};
@@ -19,7 +20,7 @@ use super::memo::EvictGuard;
 use crate::error::OgImageError;
 
 /// Resolution used for PNG export.
-const PIXELS_PER_POINT: f32 = 2.;
+const PIXELS_PER_POINT: f64 = 2.;
 
 /// The environment the Typst compiler reads from.
 ///
@@ -60,11 +61,15 @@ impl Compiler {
         })?;
 
         let page = document
-            .pages
+            .pages()
             .first()
             .ok_or_else(|| OgImageError::TypstCompilation("Typst produced no pages".into()))?;
 
-        let pixmap = typst_render::render(page, PIXELS_PER_POINT);
+        let options = RenderOptions {
+            pixel_per_pt: Scalar::new(PIXELS_PER_POINT),
+            render_bleed: false,
+        };
+        let pixmap = typst_render::render(page, &options);
         let png = pixmap.encode_png().map_err(|err| {
             OgImageError::TypstCompilation(format!("failed to encode PNG: {err}"))
         })?;
@@ -79,7 +84,7 @@ impl World for Compiler {
     }
 
     fn book(&self) -> &LazyHash<FontBook> {
-        &self.fonts.book
+        self.fonts.book()
     }
 
     fn main(&self) -> FileId {
@@ -90,7 +95,7 @@ impl World for Compiler {
         if id == MAIN_SOURCE.id() {
             Ok(MAIN_SOURCE.clone())
         } else {
-            Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
+            Err(FileError::NotFound(id.vpath().get_without_slash().into()))
         }
     }
 
@@ -99,14 +104,14 @@ impl World for Compiler {
             .get(&id)
             .or_else(|| self.avatars.get(&id))
             .cloned()
-            .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
+            .ok_or_else(|| FileError::NotFound(id.vpath().get_without_slash().into()))
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.fonts.get(index)?.get()
+        self.fonts.font(index)
     }
 
-    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, _offset: Option<Duration>) -> Option<Datetime> {
         None
     }
 }

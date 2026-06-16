@@ -2,9 +2,9 @@
 
 use std::path::Path;
 
-use ::typst::text::FontBook;
+use ::typst::text::{Font, FontBook};
 use ::typst::utils::LazyHash;
-use typst_kit::fonts::{FontSlot, Fonts};
+use typst_kit::fonts::{self, FontStore};
 
 /// The set of fonts available to the compiler.
 ///
@@ -13,8 +13,7 @@ use typst_kit::fonts::{FontSlot, Fonts};
 ///
 /// [`Arc`]: std::sync::Arc
 pub struct FontCache {
-    pub(crate) book: LazyHash<FontBook>,
-    pub(crate) fonts: Vec<FontSlot>,
+    store: FontStore,
 }
 
 impl FontCache {
@@ -23,16 +22,22 @@ impl FontCache {
     /// Mirrors the CLI's font searcher: font directory, then system fonts, then
     /// the embedded default fonts.
     pub fn load(font_dir: Option<&Path>) -> Self {
-        let mut searcher = Fonts::searcher();
+        let mut store = FontStore::new();
 
-        let fonts = match font_dir {
-            Some(dir) => searcher.search_with([dir]),
-            None => searcher.search(),
-        };
-
-        Self {
-            book: LazyHash::new(fonts.book),
-            fonts: fonts.fonts,
+        if let Some(dir) = font_dir {
+            store.extend(fonts::scan(dir));
         }
+        store.extend(fonts::system());
+        store.extend(fonts::embedded());
+
+        Self { store }
+    }
+
+    pub(crate) fn book(&self) -> &LazyHash<FontBook> {
+        self.store.book()
+    }
+
+    pub(crate) fn font(&self, index: usize) -> Option<Font> {
+        self.store.font(index)
     }
 }
