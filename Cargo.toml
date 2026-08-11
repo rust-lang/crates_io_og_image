@@ -36,7 +36,7 @@ tracing = "0.1.44"
 typst = "0.15.0"
 typst-kit = { version = "0.15.0", default-features = false, features = ["scan-fonts", "embedded-fonts"] }
 typst-layout = "0.15.0"
-typst-render = "0.15.0"
+typst-render = "0.15.1"
 
 [dev-dependencies]
 insta = "=1.48.0"
