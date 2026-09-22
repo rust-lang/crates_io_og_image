@@ -228,12 +228,11 @@ impl OgImageGenerator {
 
                 // Download the avatar from the URL
                 debug!(url = %avatar, "Downloading avatar from URL: {avatar}");
-                let response = client.get(avatar.as_ref()).send().await.map_err(|err| {
-                    OgImageError::AvatarDownloadError {
-                        url: avatar.to_string(),
-                        source: err,
-                    }
-                })?;
+                let response = client
+                    .get(avatar.as_ref())
+                    .send()
+                    .await
+                    .map_err(OgImageError::AvatarDownloadError)?;
 
                 let status = response.status();
                 if status == StatusCode::NOT_FOUND {
@@ -242,10 +241,7 @@ impl OgImageGenerator {
                 }
 
                 if let Err(err) = response.error_for_status_ref() {
-                    return Err(OgImageError::AvatarDownloadError {
-                        url: avatar.to_string(),
-                        source: err,
-                    });
+                    return Err(OgImageError::AvatarDownloadError(err));
                 }
 
                 let content_length = response.content_length();
@@ -259,10 +255,7 @@ impl OgImageGenerator {
                 let bytes = response.bytes().await;
                 let bytes = bytes.map_err(|err| {
                     error!(url = %avatar, error = %err, "Failed to read avatar response bytes");
-                    OgImageError::AvatarDownloadError {
-                        url: (*avatar).to_string(),
-                        source: err,
-                    }
+                    OgImageError::AvatarDownloadError(err)
                 })?;
 
                 debug!(url = %avatar, size_bytes = bytes.len(), "Avatar downloaded successfully");
