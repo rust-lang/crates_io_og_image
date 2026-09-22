@@ -1799,9 +1799,9 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "oxipng"
-version = "10.2.0"
+version = "10.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f80e5d92fd65b00e3953760e6a7616264a509b6bbee22502e0226774204da1a3"
+checksum = "52a88e3e5c2ad82e691b219e2b45a90eb5a51d26a434c7e191563e957a48e07a"
 dependencies = [
  "indexmap",
  "libdeflater",
