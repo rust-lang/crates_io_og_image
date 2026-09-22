@@ -10,15 +10,11 @@ pub enum OgImageError {
     EnvVarError(std::env::VarError),
 
     /// Failed to download avatar from URL.
-    #[error("Failed to download avatar from URL '{url}': {source}")]
-    AvatarDownloadError {
-        url: String,
-        #[source]
-        source: reqwest::Error,
-    },
+    #[error("Failed to download avatar")]
+    AvatarDownloadError(#[source] reqwest::Error),
 
     /// JSON serialization error.
-    #[error("JSON serialization error: {0}")]
+    #[error("JSON serialization error")]
     JsonSerializationError(#[source] serde_json::Error),
 
     /// Typst compilation failed.
