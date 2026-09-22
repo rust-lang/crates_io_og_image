@@ -13,5 +13,9 @@
       matchManagers: ["cargo"],
       rangeStrategy: "bump",
     },
+    {
+      groupName: "typst monorepo",
+      matchSourceUrls: ["https://github.com/typst/typst"],
+    },
   ],
 }
