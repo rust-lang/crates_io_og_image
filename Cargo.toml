@@ -30,7 +30,7 @@ oxipng = { version = "10.2.1", optional = true, default-features = false, featur
 reqwest = "0.13.5"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 tokio = { version = "1.53.1", features = ["rt"] }
 tracing = "0.1.44"
 typst = "0.15.1"
